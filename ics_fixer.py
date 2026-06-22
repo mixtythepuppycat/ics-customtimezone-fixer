@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
+from wsgiref.simple_server import make_server
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CUSTOM_TIMEZONE_PATH = os.path.join(BASE_DIR, "custom_timezone")
+
+
+def load_custom_timezone() -> str:
+    try:
+        with open(CUSTOM_TIMEZONE_PATH, "r", encoding="utf-8") as tz_file:
+            return tz_file.read().strip() + "\n"
+    except OSError as exc:
+        raise RuntimeError(f"Unable to read custom timezone file: {exc}") from exc
+
+
+def safe_decode(content: bytes, charset: str | None = None) -> str:
+    if charset:
+        try:
+            return content.decode(charset, errors="replace")
+        except LookupError:
+            pass
+    try:
+        return content.decode("utf-8", errors="replace")
+    except Exception:
+        return content.decode("latin-1", errors="replace")
+
+
+def append_custom_timezone(ics_text: str, timezone_text: str) -> str:
+    if timezone_text.strip() in ics_text:
+        return ics_text
+
+    if "END:VCALENDAR" in ics_text:
+        split_point = ics_text.rfind("END:VCALENDAR")
+        prefix = ics_text[:split_point]
+        suffix = ics_text[split_point:]
+        if not prefix.endswith("\n"):
+            prefix += "\n"
+        return f"{prefix}{timezone_text.strip()}\n{suffix}"
+
+    if not ics_text.endswith("\n"):
+        ics_text += "\n"
+    return f"{ics_text}{timezone_text.strip()}\n"
+
+
+def validate_url(value: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("URL must use http:// or https://")
+    return value
+
+
+def fetch_ics(url: str) -> str:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "ics-customtimezone-fixer/1.0",
+            "Accept": "text/calendar,application/octet-stream,*/*",
+        },
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            raw_data = response.read()
+            charset = response.headers.get_content_charset()
+            return safe_decode(raw_data, charset)
+    except HTTPError as exc:
+        raise RuntimeError(f"Failed to fetch ICS file: HTTP {exc.code}") from exc
+    except URLError as exc:
+        raise RuntimeError(f"Failed to fetch ICS file: {exc.reason}") from exc
+
+
+def application(environ, start_response):
+    query = parse_qs(environ.get("QUERY_STRING", ""))
+    url_values = query.get("url") or []
+
+    if not url_values:
+        start_response("400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")])
+        return [b"Missing required query parameter: url"]
+
+    try:
+        input_url = validate_url(url_values[0])
+        calendar_text = fetch_ics(input_url)
+        timezone_text = load_custom_timezone()
+        updated_calendar = append_custom_timezone(calendar_text, timezone_text)
+        headers = [
+            ("Content-Type", "text/calendar; charset=utf-8"),
+            ("Content-Disposition", "attachment; filename=customized.ics"),
+            ("Content-Length", str(len(updated_calendar.encode("utf-8")))),
+        ]
+        start_response("200 OK", headers)
+        return [updated_calendar.encode("utf-8")]
+    except ValueError as exc:
+        start_response("400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")])
+        return [str(exc).encode("utf-8")]
+    except RuntimeError as exc:
+        start_response("502 Bad Gateway", [("Content-Type", "text/plain; charset=utf-8")])
+        return [str(exc).encode("utf-8")]
+
+
+def run_server(host: str, port: int) -> None:
+    print(f"Starting ICS fixer on http://{host}:{port}/")
+    print("Send GET requests like: /?url=https://example.com/calendar.ics")
+    with make_server(host, port, application) as server:
+        server.serve_forever()
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Run a simple ICS fixer service that appends the custom_timezone block to an ICS file."
+    )
+    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind")
+    parser.add_argument("--port", type=int, default=8000, help="Port to bind")
+    args = parser.parse_args()
+
+    try:
+        run_server(args.host, args.port)
+        return 0
+    except KeyboardInterrupt:
+        print("Shutting down.")
+        return 0
+    except Exception as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
