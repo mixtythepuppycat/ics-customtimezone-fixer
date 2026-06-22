@@ -76,6 +76,17 @@ def fetch_ics(url: str) -> str:
         raise RuntimeError(f"Failed to fetch ICS file: {exc.reason}") from exc
 
 
+def validate_api_key(query: dict[str, list[str]]) -> None:
+    expected = os.getenv("ICS_FIXER_API_KEY")
+    provided = query.get("api_key") or []
+
+    if not expected:
+        raise RuntimeError("Server misconfiguration: missing ICS_FIXER_API_KEY environment variable")
+
+    if not provided or provided[0] != expected:
+        raise ValueError("Unauthorized: invalid or missing api_key")
+
+
 def application(environ, start_response):
     query = parse_qs(environ.get("QUERY_STRING", ""))
     url_values = query.get("url") or []
@@ -85,6 +96,7 @@ def application(environ, start_response):
         return [b"Missing required query parameter: url"]
 
     try:
+        validate_api_key(query)
         input_url = validate_url(url_values[0])
         calendar_text = fetch_ics(input_url)
         timezone_text = load_custom_timezone()
@@ -97,7 +109,7 @@ def application(environ, start_response):
         start_response("200 OK", headers)
         return [updated_calendar.encode("utf-8")]
     except ValueError as exc:
-        start_response("400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")])
+        start_response("401 Unauthorized", [("Content-Type", "text/plain; charset=utf-8")])
         return [str(exc).encode("utf-8")]
     except RuntimeError as exc:
         start_response("502 Bad Gateway", [("Content-Type", "text/plain; charset=utf-8")])
@@ -106,7 +118,7 @@ def application(environ, start_response):
 
 def run_server(host: str, port: int) -> None:
     print(f"Starting ICS fixer on http://{host}:{port}/")
-    print("Send GET requests like: http://<host>:<port>/?url=https://example.com/calendar.ics")
+    print("Send GET requests like: http://<host>:<port>/?url=https://example.com/calendar.ics&api_key=<key>")
     with make_server(host, port, application) as server:
         server.serve_forever()
 
