@@ -106,7 +106,7 @@ def application(environ, start_response):
 
 def run_server(host: str, port: int) -> None:
     print(f"Starting ICS fixer on http://{host}:{port}/")
-    print("Send GET requests like: /?url=https://example.com/calendar.ics")
+    print("Send GET requests like: http://<host>:<port>/?url=https://example.com/calendar.ics")
     with make_server(host, port, application) as server:
         server.serve_forever()
 
@@ -115,7 +115,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Run a simple ICS fixer service that appends the custom_timezone block to an ICS file."
     )
-    parser.add_argument("--host", default="127.0.0.1", help="Host address to bind")
+    parser.add_argument("--host", default="0.0.0.0", help="Host address to bind")
     parser.add_argument("--port", type=int, default=8000, help="Port to bind")
     args = parser.parse_args()
 

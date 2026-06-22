@@ -16,6 +16,8 @@ python3 ics_fixer.py
 curl -G --output customized.ics "http://127.0.0.1:8000/" --data-urlencode "url=https://example.com/calendar.ics"
 ```
 
+If the app is bound to all interfaces, remote clients can use your host IP or container host address instead of `127.0.0.1`.
+
 3. The response is returned as `text/calendar` and saved as `customized.ics`.
 
 ## Notes

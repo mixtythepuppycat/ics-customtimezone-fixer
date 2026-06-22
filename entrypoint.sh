@@ -5,4 +5,4 @@ if [[ -n "$CLOUDFLARED_TOKEN" ]]; then
   cloudflared tunnel run --token "$CLOUDFLARED_TOKEN" &
 fi
 
-exec python3 ics_fixer.py --host 0.0.0.0
+exec gunicorn -b 0.0.0.0:8000 ics_fixer:application

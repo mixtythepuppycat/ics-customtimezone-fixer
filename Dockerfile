@@ -10,7 +10,8 @@ COPY ics_fixer.py ./
 COPY custom_timezone ./
 COPY entrypoint.sh ./
 
-RUN chmod +x /app/entrypoint.sh \
+RUN pip install --no-cache-dir gunicorn \
+    && chmod +x /app/entrypoint.sh \
     && curl -L -o /tmp/cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && apt-get update \
     && apt-get install -y --no-install-recommends /tmp/cloudflared.deb \
