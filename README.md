@@ -43,6 +43,12 @@ Build the image from the repository root:
 docker build -t ics-customtimezone-fixer .
 ```
 
+Or you can pull the container from the registry:
+
+```bash
+docker pull ghcr.io/mixtythepuppycat/ics-customtimezone-fixer:latest
+```
+
 Run the container with the API key set:
 
 ```bash
@@ -55,4 +61,13 @@ Then request a modified ICS file:
 curl -G --output customized.ics "http://127.0.0.1:8000/" \
   --data-urlencode "url=https://example.com/calendar.ics" \
   --data-urlencode "api_key=your-secret-key"
+```
+
+If this is being used as part of a flow to share a Microsoft Exchange calendar with Google Calendar, the container needs to be accessible from the public internet. The container has `cloudflared` installed to solve this issue and will run if you provide it with your tunnel's token:
+
+```bash
+docker run --rm \
+    -e ICS_FIXER_API_KEY="your-secret-key" \
+    -e CLOUDFLARED_TOKEN="your-tunnel-token" \
+    ghcr.io/mixtythepuppycat/ics-customtimezone-fixer:latest
 ```
