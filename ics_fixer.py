@@ -77,7 +77,7 @@ def validate_api_key(query: dict[str, list[str]]) -> None:
 def application(environ, start_response):
     query = parse_qs(environ.get("QUERY_STRING", ""))
     url_values = query.get("url") or []
-    customsub_values = query.get("customsub") or []
+    customsub_values = query.get("customsub") or ["Pacific Standard Time"]
 
     if not url_values:
         start_response("400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")])
