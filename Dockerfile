@@ -7,8 +7,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY ics_fixer.py ./
-COPY custom_timezone ./
 COPY entrypoint.sh ./
+COPY requirements.txt ./
+
+RUN pip install --no-cache-dir -r requirements.txt
 
 RUN pip install --no-cache-dir gunicorn \
     && chmod +x /app/entrypoint.sh \
