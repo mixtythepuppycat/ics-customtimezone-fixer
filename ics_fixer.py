@@ -3,23 +3,18 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
+import icalendar
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 from urllib.request import Request, urlopen
 from wsgiref.simple_server import make_server
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-CUSTOM_TIMEZONE_PATH = os.path.join(BASE_DIR, "custom_timezone")
-
-
-def load_custom_timezone() -> str:
-    try:
-        with open(CUSTOM_TIMEZONE_PATH, "r", encoding="utf-8") as tz_file:
-            return tz_file.read().strip() + "\n"
-    except OSError as exc:
-        raise RuntimeError(f"Unable to read custom timezone file: {exc}") from exc
-
+def add_missing_timezones(ics_text: str) -> str:
+    calendar = icalendar.Calendar.from_ical(ics_text)
+    calendar.add_missing_timezones()
+    return calendar.to_ical().decode("utf-8")
 
 def safe_decode(content: bytes, charset: str | None = None) -> str:
     if charset:
@@ -33,21 +28,13 @@ def safe_decode(content: bytes, charset: str | None = None) -> str:
         return content.decode("latin-1", errors="replace")
 
 
-def append_custom_timezone(ics_text: str, timezone_text: str) -> str:
-    if timezone_text.strip() in ics_text:
+
+def replace_custom_timezone_tzid(ics_text: str, timezone_id: str) -> str:
+    if not timezone_id:
         return ics_text
 
-    if "END:VCALENDAR" in ics_text:
-        split_point = ics_text.rfind("END:VCALENDAR")
-        prefix = ics_text[:split_point]
-        suffix = ics_text[split_point:]
-        if not prefix.endswith("\n"):
-            prefix += "\n"
-        return f"{prefix}{timezone_text.strip()}\n{suffix}"
-
-    if not ics_text.endswith("\n"):
-        ics_text += "\n"
-    return f"{ics_text}{timezone_text.strip()}\n"
+    pattern = re.compile(r"(?<=TZID(?:=|:))Customized Time Zone\b", re.IGNORECASE)
+    return pattern.sub(timezone_id, ics_text)
 
 
 def validate_url(value: str) -> str:
@@ -90,6 +77,7 @@ def validate_api_key(query: dict[str, list[str]]) -> None:
 def application(environ, start_response):
     query = parse_qs(environ.get("QUERY_STRING", ""))
     url_values = query.get("url") or []
+    customsub_values = query.get("customsub") or []
 
     if not url_values:
         start_response("400 Bad Request", [("Content-Type", "text/plain; charset=utf-8")])
@@ -99,8 +87,14 @@ def application(environ, start_response):
         validate_api_key(query)
         input_url = validate_url(url_values[0])
         calendar_text = fetch_ics(input_url)
-        timezone_text = load_custom_timezone()
-        updated_calendar = append_custom_timezone(calendar_text, timezone_text)
+        updated_calendar = calendar_text
+        customsub_value = customsub_values[0].strip() if customsub_values else ""
+        if customsub_value:
+            updated_calendar = replace_custom_timezone_tzid(updated_calendar, customsub_value)
+
+        # Load into icalendar to add any missing time zones
+        updated_calendar = add_missing_timezones(updated_calendar)
+        
         headers = [
             ("Content-Type", "text/calendar; charset=utf-8"),
             ("Content-Disposition", "attachment; filename=customized.ics"),
