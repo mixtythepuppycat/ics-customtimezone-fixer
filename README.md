@@ -13,12 +13,13 @@ export ICS_FIXER_API_KEY="your-secret-key"
 python3 ics_fixer.py
 ```
 
-2. Send a GET request with the `url` and `api_key` query parameters:
+2. Send a GET request with the `url` and `api_key` query parameters. Use `customsub` to replace any `TZID` values that are currently set to `Customized Time Zone` with your preferred timezone identifier:
 
 ```bash
 curl -G --output customized.ics "http://127.0.0.1:8000/" \
   --data-urlencode "url=https://example.com/calendar.ics" \
-  --data-urlencode "api_key=$ICS_FIXER_API_KEY"
+  --data-urlencode "api_key=$ICS_FIXER_API_KEY" \
+  --data-urlencode "customsub=America/Los_Angeles"
 ```
 
 3. The response is returned as `text/calendar` and saved as `customized.ics`.
